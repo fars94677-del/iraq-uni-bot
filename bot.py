@@ -4,85 +4,64 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 logging.basicConfig(level=logging.INFO)
-
 TOKEN = os.environ.get("BOT_TOKEN")
 
 QUESTIONS = {
-    "الرياضيات": [
-        {"q": "ما هو تكامل x^2؟", "a": ["x^3/3 + C", "2x", "x^2/2", "x^3"], "correct": 0},
-        {"q": "ما هو مشتق sin(x)؟", "a": ["cos(x)", "-cos(x)", "tan(x)", "-sin(x)"], "correct": 0},
+    "رياضيات": [
+        {"q": "تكامل x^2 يساوي؟", "a": ["x^3/3+C", "2x", "x^2/2", "x^3"], "c": 0},
+        {"q": "مشتق sin(x) يساوي؟", "a": ["cos(x)", "-cos(x)", "tan(x)", "-sin(x)"], "c": 0},
     ],
-    "الفيزياء": [
-        {"q": "ما هي وحدة القوة؟", "a": ["نيوتن", "جول", "واط", "باسكال"], "correct": 0},
-        {"q": "سرعة الضوء تقريباً؟", "a": ["3x10^8 م/ث", "3x10^6 م/ث", "3x10^5 م/ث", "3x10^9 م/ث"], "correct": 0},
+    "فيزياء": [
+        {"q": "وحدة القوة؟", "a": ["نيوتن", "جول", "واط", "باسكال"], "c": 0},
+        {"q": "سرعة الضوء؟", "a": ["3x10^8", "3x10^6", "3x10^5", "3x10^9"], "c": 0},
     ],
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("السنة الاولى", callback_data="year_1")],
-        [InlineKeyboardButton("السنة الثانية", callback_data="year_2")],
-        [InlineKeyboardButton("السنة الثالثة", callback_data="year_3")],
-        [InlineKeyboardButton("السنة الرابعة", callback_data="year_4")],
+    kb = [
+        [InlineKeyboardButton("السنة الاولى", callback_data="y1")],
+        [InlineKeyboardButton("السنة الثانية", callback_data="y2")],
+        [InlineKeyboardButton("السنة الثالثة", callback_data="y3")],
+        [InlineKeyboardButton("السنة الرابعة", callback_data="y4")],
     ]
-    await update.message.reply_text(
-        "مرحبا بك في بوت امتحانات الجامعة العراقية!\n\nاختر سنتك الدراسية:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await update.message.reply_text("مرحبا! اختر سنتك:", reply_markup=InlineKeyboardMarkup(kb))
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-
-    if data.startswith("year_"):
-        keyboard = [
-            [InlineKeyboardButton("رياضيات", callback_data="subject_الرياضيات")],
-            [InlineKeyboardButton("فيزياء", callback_data="subject_الفيزياء")],
-            [InlineKeyboardButton("رجوع", callback_data="back_start")],
+    q = update.callback_query
+    await q.answer()
+    d = q.data
+    if d.startswith("y"):
+        kb = [
+            [InlineKeyboardButton("رياضيات", callback_data="s_رياضيات")],
+            [InlineKeyboardButton("فيزياء", callback_data="s_فيزياء")],
         ]
-        await query.edit_message_text("اختر المادة:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    elif data.startswith("subject_"):
-        subject = data.replace("subject_", "")
-        context.user_data["subject"] = subject
-        context.user_data["q_index"] = 0
-        context.user_data["score"] = 0
-        await send_question(query, context, subject, 0)
-
-    elif data.startswith("ans_"):
-        subject = context.user_data.get("subject")
-        index = context.user_data.get("q_index", 0)
-        score = context.user_data.get("score", 0)
-        chosen = int(data.split("_")[1])
-        correct = QUESTIONS[subject][index]["correct"]
-        if chosen == correct:
+        await q.edit_message_text("اختر المادة:", reply_markup=InlineKeyboardMarkup(kb))
+    elif d.startswith("s_"):
+        sub = d[2:]
+        context.user_data.update({"sub": sub, "i": 0, "score": 0})
+        await ask(q, context, sub, 0)
+    elif d.startswith("a_"):
+        sub = context.user_data["sub"]
+        i = context.user_data["i"]
+        score = context.user_data["score"]
+        if int(d[2:]) == QUESTIONS[sub][i]["c"]:
             score += 1
             context.user_data["score"] = score
-            result = "صحيحة!"
+            res = "صح!"
         else:
-            result = f"خطا! الصواب: {QUESTIONS[subject][index]['a'][correct]}"
-        index += 1
-        context.user_data["q_index"] = index
-        if index < len(QUESTIONS[subject]):
-            await query.edit_message_text(result)
-            await send_question(query, context, subject, index)
+            res = f"خطا! الجواب: {QUESTIONS[sub][i]['a'][QUESTIONS[sub][i]['c']]}"
+        i += 1
+        context.user_data["i"] = i
+        if i < len(QUESTIONS[sub]):
+            await q.edit_message_text(res)
+            await ask(q, context, sub, i)
         else:
-            await query.edit_message_text(f"{result}\n\nانتهى الاختبار!\nنتيجتك: {score}/{len(QUESTIONS[subject])}")
+            await q.edit_message_text(f"{res}\nالنتيجة: {score}/{len(QUESTIONS[sub])}")
 
-    elif data == "back_start":
-        keyboard = [
-            [InlineKeyboardButton("السنة الاولى", callback_data="year_1")],
-            [InlineKeyboardButton("السنة الثانية", callback_data="year_2")],
-            [InlineKeyboardButton("السنة الثالثة", callback_data="year_3")],
-            [InlineKeyboardButton("السنة الرابعة", callback_data="year_4")],
-        ]
-        await query.edit_message_text("اختر سنتك الدراسية:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def send_question(query, context, subject, index):
-    q = QUESTIONS[subject][index]
-    keyboard = [[InlineKeyboardButton(ans, callback_data=f"ans_{i}")] for i, ans in enumerate(q["a"])]
-    await query.message.reply_text(f"سؤال {index+1}:\n{q['q']}", reply_markup=InlineKeyboardMarkup(keyboard))
+async def ask(q, context, sub, i):
+    qd = QUESTIONS[sub][i]
+    kb = [[InlineKeyboardButton(a, callback_data=f"a_{j}")] for j, a in enumerate(qd["a"])]
+    await q.message.reply_text(f"سؤال {i+1}: {qd['q']}", reply_markup=InlineKeyboardMarkup(kb))
 
 if __name__ == "__main__":
     app = Application.builder().token(TOKEN).build()
